@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LAN Security Breach Analyzer</title>
+
+<style>
+body {
+    margin: 0;
+    background: black;
+    color: #00ff9c;
+    font-family: Consolas, monospace;
+}
+
+/* Header */
+header {
+    text-align: center;
+    padding: 15px;
+    border-bottom: 1px solid #00ff9c;
+}
+
+/* Layout */
+.container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    padding: 15px;
+}
+
+/* Boxes */
+.box {
+    flex: 1;
+    min-width: 300px;
+    border: 1px solid #00ff9c;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.case-box {
+    border-color: red;
+    background: rgba(255,0,0,0.08);
+}
+
+.case-box h3 { color: red; }
+
+/* Terminal */
+#terminal {
+    border: 1px solid #00ff9c;
+    padding: 10px;
+    height: 300px;
+    overflow-y: auto;
+    white-space: pre-line;
+}
+
+/* Input */
+.input-line {
+    margin-top: 10px;
+}
+
+input {
+    background: black;
+    border: none;
+    color: #00ff9c;
+    outline: none;
+    width: 140px;
+}
+
+button {
+    background: black;
+    border: 1px solid #00ff9c;
+    color: #00ff9c;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+/* Colors */
+.red { color: red; }
+.yellow { color: orange; }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container { flex-direction: column; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+<h2>🔐 LAN SECURITY BREACH ANALYZER</h2>
+</header>
+
+<div class="container">
+
+<!-- CASE STUDY -->
+<div class="box case-box">
+<h3>⚠ CASE STUDY: NotPetya Attack (2017)</h3>
+<p><b>Attack Vector:</b> Compromised software update</p>
+<p><b>Propagation:</b> SMB (Port 445) + credential theft</p>
+<p><b>Vulnerabilities:</b> Open ports, no segmentation</p>
+<p><b>Impact:</b> Destroyed enterprise networks globally</p>
+<p><b>Lesson:</b> Internal LAN trust leads to rapid malware spread</p>
+</div>
+
+<!-- HISTORY -->
+<div class="box">
+<h3>📊 Scan History</h3>
+<div id="historyBox">No scans yet</div>
+</div>
+
+<!-- TERMINAL -->
+<div class="box" style="flex:2">
+<div id="terminal"></div>
+
+<div class="input-line">
+root@kali:~# scan 
+<input type="text" id="ipInput" placeholder="192.168.1.1">
+<button onclick="startScan()">Run</button>
+<button onclick="startScan(true)">🔄 Refresh</button>
+</div>
+</div>
+
+</div>
+
+<script>
+
+// Memory
+let scanCache = {};
+let scanHistory = [];
+let ipReputation = {};
+
+const terminal = document.getElementById("terminal");
+
+// Typing
+function typeLine(text, speed=20, color="") {
+    return new Promise(resolve => {
+        let i=0;
+        let line=document.createElement("div");
+        if(color) line.classList.add(color);
+        terminal.appendChild(line);
+
+        function type() {
+            if(i<text.length){
+                line.innerHTML+=text.charAt(i);
+                i++;
+                setTimeout(type,speed);
+            } else {
+                terminal.scrollTop=terminal.scrollHeight;
+                resolve();
+            }
+        }
+        type();
+    });
+}
+
+// IP validation
+function validIP(ip){
+    return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip);
+}
+
+// History
+function updateHistory(ip){
+    if(!scanHistory.includes(ip)){
+        scanHistory.unshift(ip);
+        if(scanHistory.length>5) scanHistory.pop();
+    }
+
+    document.getElementById("historyBox").innerHTML =
+        scanHistory.map(i =>
+            `<div onclick="quickScan('${i}')" style="cursor:pointer;">🔹 ${i}</div>`
+        ).join("");
+}
+
+function quickScan(ip){
+    document.getElementById("ipInput").value = ip;
+    startScan();
+}
+
+// Main Scan
+async function startScan(force=false){
+
+    let ip=document.getElementById("ipInput").value;
+
+    if(!validIP(ip)){
+        await typeLine("❌ Invalid IP Address",20,"red");
+        return;
+    }
+
+    terminal.innerHTML="";
+
+    await typeLine("Initializing scan...");
+    await typeLine("Target: "+ip);
+
+    let results;
+
+    if(scanCache[ip] && !force){
+        await typeLine("📂 Loaded from memory\n");
+        results=scanCache[ip];
+    } else {
+
+        await typeLine("🔍 Scanning...\n");
+
+        const ports=[
+            {p:21,s:"FTP"},
+            {p:22,s:"SSH"},
+            {p:80,s:"HTTP"},
+            {p:135,s:"RPC"},
+            {p:139,s:"NetBIOS"},
+            {p:445,s:"SMB"}
+        ];
+
+        results=[];
+        for(let port of ports){
+
+            await new Promise(r=>setTimeout(r,300));
+
+            let open=Math.random()>0.5;
+            let state=open?"OPEN":"CLOSED";
+
+            let level="LOW";
+            if(open && port.p===445) level="HIGH";
+            else if(open && port.p===139) level="MEDIUM";
+
+            results.push({...port,state,level});
+        }
+
+        scanCache[ip]=results;
+    }
+
+    let risk=0;
+
+    for(let r of results){
+        if(r.level!=="LOW") risk++;
+
+        await typeLine(
+            `[PORT ${r.p}] ${r.s} → ${r.state} → ${r.level}`
+        );
+    }
+
+    let final="SAFE";
+    if(risk>=2) final="HIGH";
+    else if(risk===1) final="MEDIUM";
+
+    ipReputation[ip]=final;
+
+    await typeLine("\n📊 Reputation: "+final);
+    await typeLine("⏱ Time: "+new Date().toLocaleTimeString());
+
+    await typeLine("\nAnalyzing...");
+
+    if(final==="HIGH"){
+        await typeLine("🚨 HIGH RISK!",20,"red");
+    } else if(final==="MEDIUM"){
+        await typeLine("⚠ MEDIUM RISK",20,"yellow");
+    } else {
+        await typeLine("✅ Secure");
+    }
+
+    await typeLine("\nScan complete.\n");
+
+    updateHistory(ip);
+}
+
+</script>
+
+</body>
+</html>
